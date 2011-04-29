@@ -1,0 +1,101 @@
+﻿{
+module Lexer
+open System
+open Parser
+open Microsoft.FSharp.Text.Lexing
+
+let lexeme lexbuf =
+    LexBuffer<char>.LexemeString lexbuf
+
+// Keywords
+let keywords = ["array", ARRAY;
+"if", IF ;
+"then", THEN;
+"else", ELSE;
+"while", WHILE;
+"for", FOR;
+"to", TO;
+"do", DO;
+"let", LET;
+"in", IN;
+"end", END;
+"of", OF;
+"break", BREAK;
+"nil",  NIL;
+"function", FUNCTION;
+"var", VAR;
+"type", TYPE;
+"import", IMPORT;
+"primitive", PRIMITIVE;] |> Map.ofList
+
+let mutable commentLevel = 0
+
+let ret token f buf =
+  match commentLevel with 
+  | 0 -> token 
+  | _ -> f buf
+}
+
+// Regular expression definitions
+let digit = ['0'-'9']
+let char = ['a'-'z' 'A'-'Z' '_']
+let id = char (char|digit)*
+let string = '"' ([^ '"'])* '"'
+let whitespace = [' ' '\t' ]
+let newline = ('\n' | '\r' '\n')
+
+rule tokenize = parse
+| whitespace	{ tokenize lexbuf; }
+| "/*"			{ commentLevel <- commentLevel + 1; printfn "entering comment level %d" commentLevel; tokenize lexbuf; }
+| "*/"			{ if commentLevel > 0 then printfn "exiting comment level %d" commentLevel; commentLevel <- commentLevel - 1;tokenize lexbuf; else failwith "invalid end of comment found";}
+| newline       { lexbuf.EndPos <- lexbuf.EndPos.NextLine; tokenize lexbuf; }   
+// Operators
+| "+"			{ ret PLUS tokenize lexbuf  }
+| "-"			{ ret MINUS tokenize lexbuf }
+| "*"			{ ret ASTER tokenize lexbuf }
+| "/"			{ ret SLASH tokenize lexbuf }
+| "="			{ ret EQ tokenize lexbuf    }
+| "<>"			{ ret NOTEQ tokenize lexbuf }
+| ">"			{ ret GT tokenize lexbuf    }
+| ">="			{ ret GTE tokenize lexbuf   }
+| "<="			{ ret LTE tokenize lexbuf   }
+| "<"			{ ret LT tokenize lexbuf    }
+| ","			{ ret COMMA tokenize lexbuf }
+| ";"			{ ret SEMICOLON tokenize lexbuf }
+| ":"			{ ret COLON tokenize lexbuf }
+| ":="			{ ret ASSIGN tokenize lexbuf }
+| "."			{ ret DOT tokenize lexbuf }
+| "&"			{ ret AND tokenize lexbuf }
+| "|"			{ ret OR tokenize lexbuf }
+// Misc
+| "("			{ ret LPAREN tokenize lexbuf }
+| ")"			{ ret RPAREN tokenize lexbuf }
+| "["			{ ret LBRACKET tokenize lexbuf }
+| "]"			{ ret RBRACKET tokenize lexbuf }
+| "{"			{ ret LCURLY tokenize lexbuf }
+| "}"			{ ret RCURLY tokenize lexbuf }
+
+// Numberic constants
+| digit+		
+{ 
+ let token = INT (Int32.Parse(lexeme lexbuf))
+ ret token tokenize lexbuf  
+}
+
+// Identifiers
+| string		
+{ 
+ let token = STRING(lexeme lexbuf)
+ ret token tokenize lexbuf   
+}
+| id 
+{ 
+ match keywords.TryFind(lexeme lexbuf) with   
+ | Some(token) -> ret token tokenize lexbuf  
+ | None -> 
+   let token = ID(lexeme lexbuf)
+   ret token tokenize lexbuf 
+}
+// EOF
+| eof   { EOF }
+
